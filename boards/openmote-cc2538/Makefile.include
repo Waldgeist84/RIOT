@@ -1,6 +1,9 @@
 # define the cpu used by the OpenMote-cc2538 board
 export CPU = cc2538
-export CPU_MODEL = cc2538sf53
+#export CPU_MODEL = cc2538sf53
+export CPU_MODEL = cc2538sf23
+
+#endif
 
 # define the default port depending on the host OS
 PORT_LINUX ?= /dev/ttyUSB0
@@ -20,7 +23,8 @@ else
   export OFLAGS = -O binary
   export HEXFILE = $(ELFFILE:.elf=.bin)
   export FLASHER = $(RIOTBASE)/dist/tools/cc2538-bsl/cc2538-bsl.py
-  export FFLAGS  = -p "$(PORT)" -e -w -v -b 460800 $(HEXFILE)
+#  export FLASHER = /opt/contiki/contiki/tools/cc2538-bsl/cc2538-bsl.py
+  export FFLAGS  = -p "$(PORT)" -e --bootloader-invert-lines -w -v -b 450000 $(HEXFILE)
 endif
 
 # setup serial terminal
