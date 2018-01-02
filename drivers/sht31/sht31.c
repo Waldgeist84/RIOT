@@ -79,8 +79,8 @@ static int _do_measure(const sht31_t *dev, uint8_t command_a, uint8_t command_b,
 
     i2c_release(SHT31_I2C);
 
-    /* check delay, this value is from adafruit driver */
-    xtimer_usleep(20* US_PER_MS);
+    /* wait until values are available - this setting is valid for high repeadability and can be lower for other settings */
+    xtimer_usleep(15 * US_PER_MS);
 
     temp = result[0];
     temp <<= 8;
