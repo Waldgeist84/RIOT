@@ -29,7 +29,7 @@
 /* Internal functions */
 static void *_event_loop(void *arg);
 static void _listen(sock_udp_t *sock);
-static ssize_t _well_known_core_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len);
+static ssize_t _well_known_core_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len, void *ctx);
 static ssize_t _write_options(coap_pkt_t *pdu, uint8_t *buf, size_t len);
 static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
                                                          sock_udp_ep_t *remote);
@@ -48,7 +48,7 @@ static void _find_obs_memo_resource(gcoap_observe_memo_t **memo,
 
 /* Internal variables */
 const coap_resource_t _default_resources[] = {
-    { "/.well-known/core", COAP_GET, _well_known_core_handler },
+    { "/.well-known/core", COAP_GET, _well_known_core_handler, NULL },
 };
 
 static gcoap_listener_t _default_listener = {
@@ -178,7 +178,10 @@ static void _listen(sock_udp_t *sock)
                 || coap_get_type(&pdu) == COAP_TYPE_CON) {
             size_t pdu_len = _handle_req(&pdu, buf, sizeof(buf), &remote);
             if (pdu_len > 0) {
-                sock_udp_send(sock, buf, pdu_len, &remote);
+                ssize_t bytes = sock_udp_send(sock, buf, pdu_len, &remote);
+                if (bytes <= 0) {
+                    DEBUG("gcoap: send response failed: %d\n", (int)bytes);
+                }
             }
         }
         else {
@@ -307,7 +310,7 @@ static size_t _handle_req(coap_pkt_t *pdu, uint8_t *buf, size_t len,
         return -1;
     }
 
-    ssize_t pdu_len = resource->handler(pdu, buf, len);
+    ssize_t pdu_len = resource->handler(pdu, buf, len, resource->context);
     if (pdu_len < 0) {
         pdu_len = gcoap_response(pdu, buf, len,
                                  COAP_CODE_INTERNAL_SERVER_ERROR);
@@ -454,8 +457,9 @@ static void _expire_request(gcoap_request_memo_t *memo)
  * Handler for /.well-known/core. Lists registered handlers, except for
  * /.well-known/core itself.
  */
-static ssize_t _well_known_core_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len)
+static ssize_t _well_known_core_handler(coap_pkt_t* pdu, uint8_t *buf, size_t len, void *ctx)
 {
+    (void)ctx;
    /* write header */
     gcoap_resp_init(pdu, buf, len, COAP_CODE_CONTENT);
     int plen = gcoap_get_resource_list(pdu->payload, (size_t)pdu->payload_len,
@@ -807,9 +811,9 @@ size_t gcoap_req_send2(const uint8_t *buf, size_t len,
     }
 
     /* Memos complete; send msg and start timer */
-    size_t res = sock_udp_send(&_sock, buf, len, remote);
+    ssize_t res = sock_udp_send(&_sock, buf, len, remote);
 
-    if (res && timeout > 0) {     /* timeout may be zero for non-confirmable */
+    if ((res > 0) && (timeout > 0)) {     /* timeout may be zero for non-confirmable */
         /* We assume gcoap_req_send2() is called on some thread other than
          * gcoap's. First, put a message in the mbox for the sock udp object,
          * which will interrupt listening on the gcoap thread. (When there are
@@ -832,14 +836,14 @@ size_t gcoap_req_send2(const uint8_t *buf, size_t len,
             DEBUG("gcoap: can't wake up mbox; no timeout for msg\n");
         }
     }
-    if (!res) {
+    if (res <= 0) {
         if (msg_type == COAP_TYPE_CON) {
             *memo->msg.data.pdu_buf = 0;    /* clear resend buffer */
         }
         memo->state = GCOAP_MEMO_UNUSED;
         DEBUG("gcoap: sock send failed: %d\n", (int)res);
     }
-    return res;
+    return (size_t)((res > 0) ? res : 0);
 }
 
 int gcoap_resp_init(coap_pkt_t *pdu, uint8_t *buf, size_t len, unsigned code)
@@ -902,7 +906,8 @@ size_t gcoap_obs_send(const uint8_t *buf, size_t len,
     _find_obs_memo_resource(&memo, resource);
 
     if (memo) {
-        return sock_udp_send(&_sock, buf, len, memo->observer);
+        ssize_t bytes = sock_udp_send(&_sock, buf, len, memo->observer);
+        return (size_t)((bytes > 0) ? bytes : 0);
     }
     else {
         return 0;

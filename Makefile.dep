@@ -110,6 +110,7 @@ endif
 ifneq (,$(filter netdev_tap,$(USEMODULE)))
   USEMODULE += netif
   USEMODULE += netdev_eth
+  USEMODULE += iolist
 endif
 
 ifneq (,$(filter gnrc_tftp,$(USEMODULE)))
@@ -122,7 +123,8 @@ ifneq (,$(filter gnrc_rpl_p2p,$(USEMODULE)))
 endif
 
 ifneq (,$(filter gnrc_rpl,$(USEMODULE)))
-  USEMODULE += gnrc_ipv6_router_default
+  USEMODULE += gnrc_icmpv6
+  USEMODULE += gnrc_ipv6_nib
   USEMODULE += trickle
   USEMODULE += xtimer
 endif
@@ -686,6 +688,10 @@ endif
 ifneq (,$(filter fatfs_vfs,$(USEMODULE)))
   USEPKG += fatfs
   USEMODULE += vfs
+endif
+
+ifneq (,$(filter benchmark,$(USEMODULE)))
+  USEMODULE += xtimer
 endif
 
 # always select gpio (until explicit dependencies are sorted out)
